@@ -13537,21 +13537,16 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
 
     html += '<div class="section-title">データの引き継ぎ</div>';
     html += '<div class="card">'+
-      '<div class="settings-row"><div><div class="t">📤 他の担当者にデータを送る</div><div class="d">QRコードを表示するか、画像として保存してLINEで送れます</div></div></div>'+
-      '<button class="btn" data-action="settings:showQr" style="margin-top:12px;">QRコードを表示する</button>'+
-      '<button class="btn secondary" data-action="settings:saveQrImage" style="margin-top:8px;">QRコードを画像として保存する</button>'+
-      '<button class="btn secondary" data-action="settings:copyData" style="margin-top:8px;">データをコピーする</button>'+
-      '<button class="btn ghost" data-action="settings:export" style="margin-top:4px;">（ファイルとして保存する）</button>'+
+      '<div class="settings-row"><div><div class="t">📤 他の担当者にデータを送る</div><div class="d">画像として保存してLINEで送るか、ファイルとして保存できます</div></div></div>'+
+      '<button class="btn" data-action="settings:saveQrImage" style="margin-top:12px;">QRコードを画像として保存する</button>'+
+      '<button class="btn secondary" data-action="settings:export" style="margin-top:8px;">ファイルとして保存する</button>'+
     '</div>';
 
     html += '<div class="card">'+
-      '<div class="settings-row"><div><div class="t">📥 他の担当者からデータを受け取る</div><div class="d">カメラで読み取るか、届いたQR画像を選んで読み込めます</div></div></div>'+
-      '<button class="btn" data-action="settings:scanQr" style="margin-top:12px;">QRコードを読み取る</button>'+
-      '<button class="btn secondary" data-action="settings:pickQrImage" style="margin-top:8px;">QR画像を選んで読み込む</button>'+
+      '<div class="settings-row"><div><div class="t">📥 他の担当者からデータを受け取る</div><div class="d">届いたQR画像を選ぶか、ファイルから復元できます</div></div></div>'+
+      '<button class="btn" data-action="settings:pickQrImage" style="margin-top:12px;">QR画像を選んで読み込む</button>'+
       '<input type="file" id="import-image-input" accept="image/*">'+
-      '<textarea id="paste-import-textarea" rows="4" placeholder="うまく読み取れない場合はここに貼り付け" style="width:100%;margin-top:10px;padding:12px 14px;font-size:15px;font-family:inherit;border:1.5px solid var(--border);border-radius:10px;background:var(--surface);color:var(--ink);"></textarea>'+
-      '<button class="btn secondary" data-action="settings:pasteImport" style="margin-top:12px;">貼り付けたデータを復元する</button>'+
-      '<button class="btn ghost" data-action="settings:importOpen" style="margin-top:4px;">（ファイルから復元する）</button>'+
+      '<button class="btn secondary" data-action="settings:importOpen" style="margin-top:8px;">ファイルから復元する</button>'+
       '<input type="file" id="import-file-input" accept="application/json,.json,.txt,text/plain">'+
     '</div>';
 
@@ -13560,7 +13555,27 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
 
     html += '<div class="section-title">その他</div>';
     html += '<div class="card"><button class="btn danger" data-action="settings:resetConfirm">すべてのデータを消去する</button></div>';
+
+    html += '<div class="section-title">次の担当者さんへ</div>';
+    html += '<div class="card" style="text-align:center;">'+
+      '<p class="desc" style="margin-top:0;">このアプリのアドレスです。下のQRコードを読み取ると、次の担当者さんのスマホでもこのアプリを開けます。</p>'+
+      renderAppUrlQr()+
+      '<p class="desc" style="margin-bottom:0;word-break:break-all;">'+esc(window.location.href)+'</p>'+
+    '</div>';
     return html;
+  }
+
+  function renderAppUrlQr(){
+    try{
+      var qr = qrcode(0, "M");
+      qr.addData(window.location.href);
+      qr.make();
+      var img = qr.createImgTag(6, 8);
+      img = img.replace("<img", '<img style="width:100%;height:auto;display:block;"');
+      return '<div style="background:#fff;border-radius:14px;padding:14px;width:100%;max-width:260px;margin:0 auto 10px;">'+img+'</div>';
+    }catch(e){
+      return '<p class="desc">QRコードを作成できませんでした。</p>';
+    }
   }
 
   /* ---------- action handling ---------- */
@@ -14175,7 +14190,21 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     }
 
     fetch(dataUrl).then(function(res){ return res.blob(); }).then(function(blob){
-      fallbackSave(blob);
+      var file = null;
+      try{ file = new File([blob], filename, { type: "image/gif" }); }catch(e){ file = null; }
+      if(navigator.share && file && navigator.canShare && navigator.canShare({ files: [file] })){
+        navigator.share({
+          files: [file],
+          title: "集金アプリのデータ",
+          text: "集金アプリのデータのQRコードです。"
+        }).catch(function(err){
+          if(!err || err.name !== "AbortError"){
+            fallbackSave(blob);
+          }
+        });
+      } else {
+        fallbackSave(blob);
+      }
     }).catch(function(){
       showToast("保存に失敗しました");
     });
