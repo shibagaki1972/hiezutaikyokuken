@@ -1027,10 +1027,11 @@
     html += '<div class="card">'+
       '<div class="settings-row"><div><div class="t">データを保存する</div><div class="d">機種変更や担当者交代のためのファイルを作成します</div></div></div>'+
       '<button class="btn secondary" data-action="settings:export" style="margin-top:12px;">データを保存する</button>'+
+      '<p class="desc" style="margin-top:10px;margin-bottom:0;">LINEなどで送る際に「共有できるアプリがありません」と出る場合は、保存されたファイルの拡張子を「.json」から「.txt」に変更してから送ってください。中身は変わらないので問題なく復元できます。</p>'+
       '<div style="height:18px;"></div>'+
       '<div class="settings-row"><div><div class="t">データを引き継ぐ</div><div class="d">保存したファイルから過去のデータを復元します</div></div></div>'+
       '<button class="btn secondary" data-action="settings:importOpen" style="margin-top:12px;">データを引き継ぐ</button>'+
-      '<input type="file" id="import-file-input" accept="application/json,.json">'+
+      '<input type="file" id="import-file-input" accept="application/json,.json,.txt,text/plain">'+
     '</div>';
 
     html += '<div class="section-title">その他</div>';
