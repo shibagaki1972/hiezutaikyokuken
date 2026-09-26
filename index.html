@@ -13537,15 +13537,18 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
 
     html += '<div class="section-title">データの引き継ぎ</div>';
     html += '<div class="card">'+
-      '<div class="settings-row"><div><div class="t">📤 他の担当者にデータを送る</div><div class="d">QRコードを表示し、相手に読み取ってもらってください</div></div></div>'+
+      '<div class="settings-row"><div><div class="t">📤 他の担当者にデータを送る</div><div class="d">QRコードを表示するか、画像として保存してLINEで送れます</div></div></div>'+
       '<button class="btn" data-action="settings:showQr" style="margin-top:12px;">QRコードを表示する</button>'+
+      '<button class="btn secondary" data-action="settings:saveQrImage" style="margin-top:8px;">QRコードを画像として保存する</button>'+
       '<button class="btn secondary" data-action="settings:copyData" style="margin-top:8px;">データをコピーする</button>'+
       '<button class="btn ghost" data-action="settings:export" style="margin-top:4px;">（ファイルとして保存する）</button>'+
     '</div>';
 
     html += '<div class="card">'+
-      '<div class="settings-row"><div><div class="t">📥 他の担当者からデータを受け取る</div><div class="d">カメラでQRコードを読み取ってください</div></div></div>'+
+      '<div class="settings-row"><div><div class="t">📥 他の担当者からデータを受け取る</div><div class="d">カメラで読み取るか、届いたQR画像を選んで読み込めます</div></div></div>'+
       '<button class="btn" data-action="settings:scanQr" style="margin-top:12px;">QRコードを読み取る</button>'+
+      '<button class="btn secondary" data-action="settings:pickQrImage" style="margin-top:8px;">QR画像を選んで読み込む</button>'+
+      '<input type="file" id="import-image-input" accept="image/*">'+
       '<textarea id="paste-import-textarea" rows="4" placeholder="うまく読み取れない場合はここに貼り付け" style="width:100%;margin-top:10px;padding:12px 14px;font-size:15px;font-family:inherit;border:1.5px solid var(--border);border-radius:10px;background:var(--surface);color:var(--ink);"></textarea>'+
       '<button class="btn secondary" data-action="settings:pasteImport" style="margin-top:12px;">貼り付けたデータを復元する</button>'+
       '<button class="btn ghost" data-action="settings:importOpen" style="margin-top:4px;">（ファイルから復元する）</button>'+
@@ -13855,6 +13858,8 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     if(action==="settings:copyData"){ doCopyToClipboard(); return; }
     if(action==="settings:showQr"){ openQrShowModal(); return; }
     if(action==="settings:scanQr"){ openQrScanModal(); return; }
+    if(action==="settings:saveQrImage"){ doSaveQrImage(); return; }
+    if(action==="settings:pickQrImage"){ document.getElementById("import-image-input").click(); return; }
     if(action==="settings:importOpen"){ document.getElementById("import-file-input").click(); return; }
     if(action==="settings:pasteImport"){
       var ta = document.getElementById("paste-import-textarea");
@@ -13914,6 +13919,34 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
         importFromText(reader.result);
       };
       reader.readAsText(file);
+      e.target.value = "";
+    }
+    if(e.target && e.target.id==="import-image-input"){
+      var imgFile = e.target.files[0];
+      if(!imgFile) return;
+      var imgReader = new FileReader();
+      imgReader.onload = function(){
+        var img = new Image();
+        img.onload = function(){
+          var canvas = document.createElement("canvas");
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          var ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0);
+          var imageData;
+          try{ imageData = ctx.getImageData(0, 0, canvas.width, canvas.height); }
+          catch(err){ showToast("画像を読み込めませんでした"); return; }
+          var code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+          if(code && code.data){
+            importFromText(code.data);
+          } else {
+            showToast("この画像からQRコードを読み取れませんでした");
+          }
+        };
+        img.onerror = function(){ showToast("画像を読み込めませんでした"); };
+        img.src = imgReader.result;
+      };
+      imgReader.readAsDataURL(imgFile);
       e.target.value = "";
     }
   });
@@ -14022,19 +14055,33 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     var statusEl = document.getElementById("qr-status");
     var shutterBtn = document.getElementById("qr-shutter-btn");
     var canvas = document.createElement("canvas");
-    var ctx = canvas.getContext("2d");
+    var ctx = canvas.getContext("2d", { willReadFrequently: true });
     var startedAt = Date.now();
     var hintShown = false;
+    var GUIDE_FRACTION = 0.92;
 
     function attemptDecode(){
       if(video.readyState !== video.HAVE_ENOUGH_DATA || video.videoWidth === 0) return null;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      var vw = video.videoWidth, vh = video.videoHeight;
+      var cropSize = Math.min(Math.round(vw * GUIDE_FRACTION), vw, vh);
+      var cropX = Math.round((vw - cropSize) / 2);
+      var cropY = Math.round((vh - cropSize) / 2);
+      canvas.width = cropSize;
+      canvas.height = cropSize;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, cropSize, cropSize);
       var imageData;
-      try{ imageData = ctx.getImageData(0, 0, canvas.width, canvas.height); }
+      try{ imageData = ctx.getImageData(0, 0, cropSize, cropSize); }
       catch(e){ return null; }
-      return jsQR(imageData.data, imageData.width, imageData.height);
+      var code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+      if(code && code.data) return code;
+      // fall back to the full frame in case the code is larger than the guide box
+      canvas.width = vw;
+      canvas.height = vh;
+      ctx.drawImage(video, 0, 0, vw, vh);
+      try{ imageData = ctx.getImageData(0, 0, vw, vh); }
+      catch(e){ return null; }
+      return jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
     }
 
     if(shutterBtn){
@@ -14063,6 +14110,17 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       video.play();
       if(statusEl) statusEl.textContent = "QRコードを枠の中に映してください";
 
+      var track = stream.getVideoTracks()[0];
+      if(track && track.getCapabilities){
+        try{
+          var caps = track.getCapabilities();
+          if(caps.zoom && caps.zoom.max > (caps.zoom.min || 1)){
+            var targetZoom = Math.min(caps.zoom.max, Math.max(caps.zoom.min || 1, (caps.zoom.min || 1) + (caps.zoom.max - (caps.zoom.min || 1)) * 0.3));
+            track.applyConstraints({ advanced: [{ zoom: targetZoom }] }).catch(function(){});
+          }
+        }catch(e){}
+      }
+
       function tick(){
         if(!qrScanState.active) return;
         var code = attemptDecode();
@@ -14074,7 +14132,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
         }
         if(!hintShown && statusEl && (Date.now() - startedAt) > 7000){
           hintShown = true;
-          statusEl.textContent = "自動で読み取れない場合は、近づいて「これで読み取る」を押してください";
+          statusEl.textContent = "読み取れない場合は、少し前後に動かしたり斜めにしたりすると読み取れることがあります（画面同士だと起きやすい現象です）";
         }
         qrScanState.rafId = requestAnimationFrame(tick);
       }
@@ -14082,6 +14140,44 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     }).catch(function(){
       showToast("カメラを使用できませんでした。設定でカメラへのアクセスを許可するか、コピー＆貼り付けをご利用ください。");
       closeModal();
+    });
+  }
+
+  function doSaveQrImage(){
+    var json = JSON.stringify(state);
+    var payload = encodeCompactPayload(json);
+    var qr;
+    try{
+      qr = qrcode(0, "L");
+      qr.addData(payload);
+      qr.make();
+    }catch(e){
+      showToast("データ量が多すぎるためQRコードを作成できません。コピー＆貼り付けまたはファイル保存をご利用ください。");
+      return;
+    }
+    var dataUrl = qr.createDataURL(10, 8);
+    var filename = "taikyoku_shukin_QR_" + todayYmd() + ".gif";
+
+    function fallbackSave(blob){
+      try{
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+        showToast("QRコードの画像を保存しました。LINEなどで写真として送れます");
+      }catch(e){
+        showToast("保存に失敗しました");
+      }
+    }
+
+    fetch(dataUrl).then(function(res){ return res.blob(); }).then(function(blob){
+      fallbackSave(blob);
+    }).catch(function(){
+      showToast("保存に失敗しました");
     });
   }
 
