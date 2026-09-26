@@ -1027,7 +1027,6 @@
     html += '<div class="card">'+
       '<div class="settings-row"><div><div class="t">データを保存する</div><div class="d">機種変更や担当者交代のためのファイルを作成します</div></div></div>'+
       '<button class="btn secondary" data-action="settings:export" style="margin-top:12px;">データを保存する</button>'+
-      '<p class="desc" style="margin-top:10px;margin-bottom:0;">LINEなどで送る際に「共有できるアプリがありません」と出る場合は、保存されたファイルの拡張子を「.json」から「.txt」に変更してから送ってください。中身は変わらないので問題なく復元できます。</p>'+
       '<div style="height:18px;"></div>'+
       '<div class="settings-row"><div><div class="t">データを引き継ぐ</div><div class="d">保存したファイルから過去のデータを復元します</div></div></div>'+
       '<button class="btn secondary" data-action="settings:importOpen" style="margin-top:12px;">データを引き継ぐ</button>'+
@@ -1381,11 +1380,11 @@
   function doExport(){
     var json = JSON.stringify(state, null, 2);
     var today = todayYmd();
-    var filename = "taikyoku_shukin_" + today + ".json";
+    var filename = "taikyoku_shukin_" + today + ".txt";
 
     function fallbackDownload(){
       try{
-        var blob = new Blob([json], { type: "application/json" });
+        var blob = new Blob([json], { type: "text/plain" });
         var url = URL.createObjectURL(blob);
         var a = document.createElement("a");
         a.href = url;
