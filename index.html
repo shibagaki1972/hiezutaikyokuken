@@ -1381,19 +1381,40 @@
     var json = JSON.stringify(state, null, 2);
     var today = todayYmd();
     var filename = "taikyoku_shukin_" + today + ".json";
+
+    function fallbackDownload(){
+      try{
+        var blob = new Blob([json], { type: "application/json" });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+        showToast("データを保存しました");
+      }catch(e){
+        showToast("保存に失敗しました");
+      }
+    }
+
     if(window.claude && window.claude.use){
       window.claude.use("downloads").then(function(downloads){
-        if(!downloads){ showToast("この画面では保存機能を利用できません"); return; }
-        downloads.save({ filename: filename, data: json }).then(function(){
-          showToast("データを保存しました");
-        }).catch(function(){
-          showToast("保存がキャンセルされました");
-        });
+        if(downloads && downloads.save){
+          downloads.save({ filename: filename, data: json }).then(function(){
+            showToast("データを保存しました");
+          }).catch(function(){
+            fallbackDownload();
+          });
+        } else {
+          fallbackDownload();
+        }
       }).catch(function(){
-        showToast("保存機能を利用できません");
+        fallbackDownload();
       });
     } else {
-      showToast("保存機能を利用できません");
+      fallbackDownload();
     }
   }
 
