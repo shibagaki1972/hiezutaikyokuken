@@ -12918,6 +12918,19 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     ensureYear(y+1);
   }
 
+  var DATA_RETENTION_YEARS = 3;
+  function purgeOldData(){
+    var cutoffYear = todayParts().y - DATA_RETENTION_YEARS;
+    Object.keys(state.years).forEach(function(yStr){
+      if(Number(yStr) < cutoffYear) delete state.years[yStr];
+    });
+    state.events = state.events.filter(function(ev){
+      if(!ev.createdYmd) return true;
+      var evYear = Number(ev.createdYmd.split("-")[0]);
+      return evYear >= cutoffYear;
+    });
+  }
+
   /* ---------- member logic ---------- */
   function newMemberId(){ var id = state.nextMemberId++; return id; }
   function addMember(name){
@@ -12948,6 +12961,25 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     if(!m) return;
     m.history.push({ym: todayYm(), type:"join"});
     saveState();
+  }
+  function deleteMember(id){
+    state.members = state.members.filter(function(m){ return m.id !== id; });
+    saveState();
+  }
+  function memberHasPaymentHistory(id){
+    var found = false;
+    Object.keys(state.years).forEach(function(y){
+      Object.keys(state.years[y]).forEach(function(mo){
+        var md = state.years[y][mo];
+        if(md && md.paid && md.paid[id]) found = true;
+      });
+    });
+    state.events.forEach(function(ev){
+      ev.participants.forEach(function(p){
+        if(p.type==="member" && p.memberId===id && ev.paid[p.id]) found = true;
+      });
+    });
+    return found;
   }
   function memberName(id){
     var m = state.members.find(function(x){ return x.id===id; });
@@ -13000,7 +13032,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
 
   /* ---------- event logic ---------- */
   function addEvent(name, amount){
-    var ev = { id: state.nextEventId++, name:name, amount:amount, participants:[], paid:{} };
+    var ev = { id: state.nextEventId++, name:name, amount:amount, participants:[], paid:{}, createdYmd: todayYmd() };
     state.events.push(ev);
     saveState();
     return ev;
@@ -13258,8 +13290,8 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       html += '<div class="empty-state">'+(ui.memberSubtab==="active" ? "在籍中のメンバーがいません" : "退会済みのメンバーはいません")+'</div>';
     } else {
       html += list.map(function(m){
-        var action = ui.memberSubtab==="active" ? "member:withdrawConfirm" : "member:rejoinConfirm";
-        return '<div class="list-item"><button class="list-row-btn" data-action="'+action+'" data-id="'+m.id+'" style="display:flex;width:100%;align-items:center;"><span class="nm">'+esc(m.name)+'</span><span class="meta">'+(ui.memberSubtab==="active"?"退会する":"再入会する")+' ›</span></button></div>';
+        var action = ui.memberSubtab==="active" ? "member:withdrawConfirm" : "member:withdrawnOptionsOpen";
+        return '<div class="list-item"><button class="list-row-btn" data-action="'+action+'" data-id="'+m.id+'" style="display:flex;width:100%;align-items:center;"><span class="nm">'+esc(m.name)+'</span><span class="meta">'+(ui.memberSubtab==="active"?"退会する":"再入会 / 削除")+' ›</span></button></div>';
       }).join("");
     }
     html += '</div>';
@@ -13484,6 +13516,9 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       '<input type="file" id="import-file-input" accept="application/json,.json,.txt,text/plain">'+
     '</div>';
 
+    html += '<div class="section-title">データの保存期間</div>';
+    html += '<div class="card"><p class="desc" style="margin:0;">毎月の集金記録・イベント記録は、記録から'+DATA_RETENTION_YEARS+'年以上経過すると自動的に削除されます。メンバーの氏名や在籍状況は削除されません。</p></div>';
+
     html += '<div class="section-title">その他</div>';
     html += '<div class="card"><button class="btn danger" data-action="settings:resetConfirm">すべてのデータを消去する</button></div>';
     return html;
@@ -13572,6 +13607,37 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
         rejoinMember(id2);
         showToast(nm2+"さんを再入会にしました");
         render();
+      });
+      return;
+    }
+    if(action==="member:withdrawnOptionsOpen"){
+      var wid = Number(el.getAttribute("data-id"));
+      var wname = memberName(wid);
+      openModal(
+        '<h2>'+esc(wname)+'さん</h2>'+
+        '<p class="desc">退会中のメンバーです。操作を選んでください。</p>'+
+        '<button class="btn" id="wo-rejoin-btn" style="margin-bottom:10px;">再入会する</button>'+
+        '<button class="btn danger" id="wo-delete-btn" style="margin-bottom:10px;">完全に削除する</button>'+
+        '<button class="btn ghost" data-action="modal:close">キャンセル</button>'
+      );
+      document.getElementById("wo-rejoin-btn").addEventListener("click", function(){
+        closeModal();
+        confirmModal(wname+"さんを再入会させますか？", "今月から集金対象になります。", "再入会する", false, function(){
+          rejoinMember(wid);
+          showToast(wname+"さんを再入会にしました");
+          render();
+        });
+      });
+      document.getElementById("wo-delete-btn").addEventListener("click", function(){
+        closeModal();
+        var warnMsg = memberHasPaymentHistory(wid)
+          ? "名前の情報は完全に削除されます。過去の支払い記録がある場合、その記録の名前は「不明」と表示されるようになります。この操作は取り消せません。"
+          : "名前の情報は完全に削除されます。この操作は取り消せません。";
+        confirmModal(wname+"さんを完全に削除しますか？", warnMsg, "削除する", true, function(){
+          deleteMember(wid);
+          showToast(wname+"さんを削除しました");
+          render();
+        });
       });
       return;
     }
@@ -13836,6 +13902,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
         state.nextParticipantId = maxP;
       }
       ensureYearsExist();
+      purgeOldData();
       saveState();
       showToast("データを引き継ぎました");
       switchRoute("home");
@@ -13986,6 +14053,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
   /* ---------- init ---------- */
   function init(){
     loadState();
+    purgeOldData();
     ensureYearsExist();
     saveState();
     render();
