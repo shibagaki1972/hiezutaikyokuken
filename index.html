@@ -13128,8 +13128,10 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
   function openModal(html){
     stopQrScan();
     var root = document.getElementById("modal-root");
-    root.innerHTML = '<div class="modal-backdrop" data-action="modal:close"><div class="modal" id="modal-inner">'+html+'</div></div>';
-    document.getElementById("modal-inner").addEventListener("click", function(e){ e.stopPropagation(); });
+    root.innerHTML = '<div class="modal-backdrop" id="modal-backdrop"><div class="modal" id="modal-inner">'+html+'</div></div>';
+    document.getElementById("modal-backdrop").addEventListener("click", function(e){
+      if(e.target === e.currentTarget) closeModal();
+    });
   }
   function closeModal(){
     stopQrScan();
@@ -13965,21 +13967,36 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     }
     openModal(
       '<h2>QRコードを読み取る</h2>'+
-      '<p class="desc">相手の画面に表示されたQRコードにカメラを向けてください。</p>'+
+      '<p class="desc">相手の画面に表示されたQRコードを、下の枠の中に大きく映してください。自動的に読み取ります（ボタン操作は不要です）。</p>'+
       '<div style="position:relative;border-radius:14px;overflow:hidden;background:#000;">'+
         '<video id="qr-video" playsinline autoplay muted style="width:100%;display:block;"></video>'+
+        '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">'+
+          '<div style="width:62%;aspect-ratio:1/1;border:3px solid #fff;border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,0.35);"></div>'+
+        '</div>'+
       '</div>'+
-      '<button class="btn secondary" data-action="modal:close" style="margin-top:16px;">キャンセル</button>'
+      '<p id="qr-status" style="text-align:center;font-size:14px;color:var(--ink-soft);margin:10px 0 0;">カメラを起動しています…</p>'+
+      '<button class="btn secondary" data-action="modal:close" style="margin-top:14px;">キャンセル</button>'+
+      '<p class="desc" style="margin-top:12px;margin-bottom:0;">LINEなどのアプリ内ブラウザで開いていると、カメラがうまく使えないことがあります。読み取れない場合は「Safari」や「Chrome」で開き直すか、下の「コピー＆貼り付け」をご利用ください。</p>'
     );
     var video = document.getElementById("qr-video");
+    var statusEl = document.getElementById("qr-status");
     var canvas = document.createElement("canvas");
     var ctx = canvas.getContext("2d");
+    var startedAt = Date.now();
+    var hintShown = false;
 
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } }).then(function(stream){
+    navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    }).then(function(stream){
       qrScanState.stream = stream;
       qrScanState.active = true;
       video.srcObject = stream;
       video.play();
+      if(statusEl) statusEl.textContent = "QRコードを枠の中に映してください";
 
       function tick(){
         if(!qrScanState.active) return;
@@ -13998,6 +14015,10 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
               importFromText(code.data);
               return;
             }
+          }
+          if(!hintShown && statusEl && (Date.now() - startedAt) > 7000){
+            hintShown = true;
+            statusEl.textContent = "読み取れないときは、少し離す・近づける、画面を明るくすると読み取りやすくなります";
           }
         }
         qrScanState.rafId = requestAnimationFrame(tick);
