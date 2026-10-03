@@ -14171,7 +14171,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       return;
     }
     var dataUrl = qr.createDataURL(10, 8);
-    var filename = "taikyoku_shukin_QR_" + todayYmd() + ".gif";
+    var filename = "taikyoku_shukin_QR_" + todayYmd() + ".jpg";
 
     function fallbackSave(blob){
       try{
@@ -14189,25 +14189,38 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       }
     }
 
-    fetch(dataUrl).then(function(res){ return res.blob(); }).then(function(blob){
-      var file = null;
-      try{ file = new File([blob], filename, { type: "image/gif" }); }catch(e){ file = null; }
-      if(navigator.share && file && navigator.canShare && navigator.canShare({ files: [file] })){
-        navigator.share({
-          files: [file],
-          title: "集金アプリのデータ",
-          text: "集金アプリのデータのQRコードです。"
-        }).catch(function(err){
-          if(!err || err.name !== "AbortError"){
-            fallbackSave(blob);
-          }
-        });
-      } else {
-        fallbackSave(blob);
-      }
-    }).catch(function(){
-      showToast("保存に失敗しました");
-    });
+    var img = new Image();
+    img.onload = function(){
+      var canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      var ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(function(blob){
+        if(!blob){ showToast("保存に失敗しました"); return; }
+        var file = null;
+        try{ file = new File([blob], filename, { type: "image/jpeg" }); }catch(e){ file = null; }
+        if(navigator.share && file && navigator.canShare && navigator.canShare({ files: [file] })){
+          navigator.share({
+            files: [file],
+            title: "集金アプリのデータ",
+            text: "集金アプリのデータのQRコードです。"
+          }).catch(function(err){
+            if(!err || err.name !== "AbortError"){
+              fallbackSave(blob);
+            }
+          });
+        } else {
+          fallbackSave(blob);
+        }
+      }, "image/jpeg", 0.92);
+    };
+    img.onerror = function(){
+      showToast("QRコードの画像を作成できませんでした");
+    };
+    img.src = dataUrl;
   }
 
   function doExport(){
